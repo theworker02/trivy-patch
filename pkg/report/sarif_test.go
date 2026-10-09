@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/owenrumney/go-sarif/v2/sarif"
 	"github.com/stretchr/testify/assert"
@@ -11,6 +12,7 @@ import (
 
 	dbTypes "github.com/aquasecurity/trivy-db/pkg/types"
 	"github.com/aquasecurity/trivy-db/pkg/vulnsrc/vulnerability"
+	"github.com/aquasecurity/trivy/pkg/clock"
 	ftypes "github.com/aquasecurity/trivy/pkg/fanal/types"
 	"github.com/aquasecurity/trivy/pkg/report"
 	"github.com/aquasecurity/trivy/pkg/types"
@@ -20,6 +22,8 @@ import (
 // The correctness of PathToFileURI itself (including Windows path handling) is verified in TestWrite_Sarif.
 func TestReportWriter_Sarif(t *testing.T) {
 	tmpScanURI := report.PathToFileURI("/tmp/scan")
+	invocationTime := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	executionSuccessful := true
 
 	tests := []struct {
 		name   string
@@ -740,12 +744,21 @@ func TestReportWriter_Sarif(t *testing.T) {
 				Output: sarifWritten,
 				Target: tt.target,
 			}
-			err := w.Write(t.Context(), tt.input)
+			err := w.Write(clock.With(t.Context(), invocationTime), tt.input)
 			require.NoError(t, err)
 
 			result := &sarif.Report{}
 			err = json.Unmarshal(sarifWritten.Bytes(), result)
 			require.NoError(t, err)
+			require.Len(t, result.Runs, 1)
+			assert.Equal(t, []*sarif.Invocation{
+				{
+					StartTimeUTC:        &invocationTime,
+					EndTimeUTC:          &invocationTime,
+					ExecutionSuccessful: &executionSuccessful,
+				},
+			}, result.Runs[0].Invocations)
+			result.Runs[0].Invocations = nil
 			assert.Equal(t, tt.want, result)
 		})
 	}

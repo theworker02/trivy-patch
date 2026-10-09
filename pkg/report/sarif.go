@@ -13,6 +13,7 @@ import (
 	"github.com/owenrumney/go-sarif/v2/sarif"
 	"golang.org/x/xerrors"
 
+	"github.com/aquasecurity/trivy/pkg/clock"
 	ftypes "github.com/aquasecurity/trivy/pkg/fanal/types"
 	"github.com/aquasecurity/trivy/pkg/log"
 	"github.com/aquasecurity/trivy/pkg/types"
@@ -125,7 +126,9 @@ func pathToFileURI(path string) string {
 	return fmt.Sprintf("file://%s/", slashPath)
 }
 
-func (sw *SarifWriter) Write(_ context.Context, report types.Report) error {
+func (sw *SarifWriter) Write(ctx context.Context, report types.Report) error {
+	startedAt := clock.Now(ctx).UTC()
+
 	sarifReport, err := sarif.New(sarif.Version210)
 	if err != nil {
 		return xerrors.Errorf("error creating a new sarif template: %w", err)
@@ -268,6 +271,9 @@ func (sw *SarifWriter) Write(_ context.Context, report types.Report) error {
 			},
 		}
 	}
+	sw.run.AddInvocation(true).
+		WithStartTimeUTC(startedAt).
+		WithEndTimeUTC(clock.Now(ctx).UTC())
 	sarifReport.AddRun(sw.run)
 	return sarifReport.PrettyWrite(sw.Output)
 }
